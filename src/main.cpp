@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-// Library for pin-change
+// Library for pin-change interrupts
 // https://github.com/GreyGnome/EnableInterrupt
 #include "EnableInterrupt.h"
 
@@ -21,9 +21,9 @@ const uint8_t PLAYER_2_BUTTON = 3;
 #endif
 
 const uint8_t DEBOUNCE_MS = 100;
+const unsigned int PLAYER_1_FREQ = 494; // B4
+const unsigned int PLAYER_2_FREQ = 523; // C5
 const unsigned int PLAY_FREQ = 440; // A4
-const unsigned int PLAYER_1_FREQ = 494; // B4;
-const unsigned int PLAYER_2_FREQ = 523; // C4
 const unsigned int ERROR_FREQ = 900; 
 
 // STARTUP
@@ -44,12 +44,12 @@ volatile unsigned long startReactionAt;
 volatile unsigned long lastStateTransitionAt;
 volatile bool playerError;
 
+void print(const char* msg);
 void playerButtonPressed(Player player);
 void player1ButtonPressed() { playerButtonPressed(PLAYER_1); }
 void player2ButtonPressed() { playerButtonPressed(PLAYER_2); }
 bool nbDelay(unsigned int ms);
 void transitionState(State newState, bool debounce = false);
-void print(const char* msg);
 
 void setup() {
   #ifdef __AVR_ATmega328P__
@@ -75,14 +75,12 @@ void loop() {
   {
     case STARTUP: {
       for(int i = 0; i < 2; i++) {
-        for(int val = 1; val >= 0; val--) {
-          digitalWrite(PLAYER_1_LED, val);
-          tone(BUZZER_PIN, PLAYER_1_FREQ); 
-          nbDelay(200);
-          digitalWrite(PLAYER_2_LED, val);
-          tone(BUZZER_PIN, PLAYER_2_FREQ);
-
-          nbDelay(200);
+        for(int isOn = 1; isOn >= 0; isOn--) {
+          for(int j = 0; j < 2; j++) {
+            digitalWrite(j ? PLAYER_2_LED : PLAYER_1_LED, isOn);
+            tone(BUZZER_PIN, j ? PLAYER_2_FREQ : PLAYER_1_FREQ); 
+            nbDelay(200);
+          }
         }
       }
       noTone(BUZZER_PIN);
@@ -133,11 +131,7 @@ void loop() {
             nbDelay(100);
           }
       } else {
-        if(winningPlayer == PLAYER_1) {
-            tone(BUZZER_PIN, PLAYER_1_FREQ);
-        } else {
-            tone(BUZZER_PIN, PLAYER_2_FREQ);
-        }
+        tone(BUZZER_PIN, winningPlayer == PLAYER_1 ? PLAYER_1_FREQ : PLAYER_2_FREQ);
         nbDelay(500);
         noTone(BUZZER_PIN);
       }
@@ -158,14 +152,13 @@ void loop() {
 void playerButtonPressed(Player player) {
   buttonPressAt[player] = millis();
   switch(state) {
-    case REACTING: {
-      
+    case PLAYING: {
+      playerError = true;
       winningPlayer = player == PLAYER_1 ? PLAYER_2 : PLAYER_1;
       transitionState(SCORING);
       break;
     }
-    case PLAYING: {
-      playerError = true;
+    case REACTING: {      
       winningPlayer = player;
       transitionState(SCORING);
       break;
