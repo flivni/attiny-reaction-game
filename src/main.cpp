@@ -1,5 +1,7 @@
 #include <Arduino.h>
-// https://github.com/GreyGnome/EnableInterrupt?utm_source=platformio&utm_medium=piohome
+
+// Library for pin-change
+// https://github.com/GreyGnome/EnableInterrupt
 #include "EnableInterrupt.h"
 
 #if defined(__AVR_ATmega328P__)
@@ -36,15 +38,15 @@ const unsigned int ERROR_FREQ = 900;
 //   - Flash red light, wait for either button to be pressed. When either button is pressed, record winner
 //     and transition to SCORING.
 volatile enum State {STARTUP, READY, PRE_PLAY, PLAYING, REACTING, SCORING, POST_SCORING} state;
-volatile enum Player {NONE = -1, PLAYER_1 = 0, PLAYER_2 = 1} winningPlayer;
-volatile unsigned long button1PressAt;
-volatile unsigned long button2PressAt;
+volatile enum Player {PLAYER_1, PLAYER_2, NONE} winningPlayer;
+volatile unsigned long buttonPressAt[2] = {0, 0};
 volatile unsigned long startReactionAt;
 volatile unsigned long lastStateTransitionAt;
 volatile bool playerError;
 
-void player1ButtonPressed();
-void player2ButtonPressed();
+void playerButtonPressed(Player player);
+void player1ButtonPressed() { playerButtonPressed(PLAYER_1); }
+void player2ButtonPressed() { playerButtonPressed(PLAYER_2); }
 bool nbDelay(unsigned int ms);
 void transitionState(State newState, bool debounce = false);
 void print(const char* msg);
@@ -153,55 +155,26 @@ void loop() {
   }
 }
 
-void player1ButtonPressed() {
-  button1PressAt = millis();
+void playerButtonPressed(Player player) {
+  buttonPressAt[player] = millis();
   switch(state) {
     case REACTING: {
-      winningPlayer = PLAYER_1;
+      
+      winningPlayer = player == PLAYER_1 ? PLAYER_2 : PLAYER_1;
       transitionState(SCORING);
       break;
     }
     case PLAYING: {
       playerError = true;
-      winningPlayer = PLAYER_2;
+      winningPlayer = player;
       transitionState(SCORING);
       break;
     }
     case READY:
     case POST_SCORING:
     case SCORING: {
-      unsigned long delta = button1PressAt - button2PressAt;
-      if (abs(delta) < 100) {
-        transitionState(PRE_PLAY, true);
-      }
-      break;
-    }    
-    default: {
-      break;
-    }
-  }
-}
-
-void player2ButtonPressed() {
-  button2PressAt = millis();
-
-  switch(state) {
-    case REACTING: {
-      winningPlayer = PLAYER_2;
-      transitionState(SCORING);
-      break;
-    }
-    case PLAYING: {
-      playerError = true;
-      winningPlayer = PLAYER_1;
-      transitionState(SCORING);
-      break;
-    }
-    case READY:
-    case POST_SCORING:
-    case SCORING: {
-      unsigned long delta = button2PressAt - button1PressAt;
-      if (abs(delta) < 100) {
+      unsigned long delta = buttonPressAt[0] - buttonPressAt[1];
+      if (abs(delta) < DEBOUNCE_MS) {
         transitionState(PRE_PLAY, true);
       }
       break;
@@ -213,8 +186,9 @@ void player2ButtonPressed() {
   }
 }
 
-// delays for ms milliseconds, but returns early if the state changes
-// returns true if interrupted with a state change, false if the delay completes
+
+// delays for ms milliseconds, but returns early if the state has changed
+// returns true if interrupted with a state change, false if the delay completes without interruption
 bool nbDelay(unsigned int ms) {
  State currentState = state;
   unsigned long startMs = millis();
@@ -228,7 +202,6 @@ bool nbDelay(unsigned int ms) {
 }
 
 void transitionState(State newState, bool debounce) {
-  print("Transitioning state");
   if (debounce && ((millis() - lastStateTransitionAt) < DEBOUNCE_MS)) {
     return;
   }
