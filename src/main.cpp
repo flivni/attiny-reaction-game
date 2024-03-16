@@ -1,13 +1,24 @@
 #include <Arduino.h>
+// https://github.com/GreyGnome/EnableInterrupt?utm_source=platformio&utm_medium=piohome
 #include "EnableInterrupt.h"
 
+#if defined(__AVR_ATmega328P__)
+const uint8_t BUZZER_PIN = 10; 
+const uint8_t PLAYER_1_LED = 5;
+const uint8_t PLAYER_2_LED = 6; 
+const uint8_t PLAYER_1_BUTTON = 4; 
+const uint8_t PLAYER_2_BUTTON = 3; 
+#elif defined(__AVR_ATtiny85__)
 const uint8_t BUZZER_PIN = 0;
 const uint8_t PLAYER_1_LED = 1;
 const uint8_t PLAYER_2_LED = 2;
 const uint8_t PLAYER_1_BUTTON = 4;
 const uint8_t PLAYER_2_BUTTON = 3;
-const uint8_t DEBOUNCE_MS = 100;
+#else
+#error "Unsupported platform!"
+#endif
 
+const uint8_t DEBOUNCE_MS = 100;
 const unsigned int PLAY_FREQ = 440; // A4
 const unsigned int PLAYER_1_FREQ = 494; // B4;
 const unsigned int PLAYER_2_FREQ = 523; // C4
@@ -36,9 +47,12 @@ void player1ButtonPressed();
 void player2ButtonPressed();
 bool nbDelay(unsigned int ms);
 void transitionState(State newState, bool debounce = false);
+void print(const char* msg);
 
 void setup() {
-  // https://github.com/GreyGnome/EnableInterrupt?utm_source=platformio&utm_medium=piohome
+  #ifdef __AVR_ATmega328P__
+    Serial.begin(9600);
+  #endif
 
   transitionState(STARTUP);
   winningPlayer = NONE;
@@ -214,9 +228,16 @@ bool nbDelay(unsigned int ms) {
 }
 
 void transitionState(State newState, bool debounce) {
+  print("Transitioning state");
   if (debounce && ((millis() - lastStateTransitionAt) < DEBOUNCE_MS)) {
     return;
   }
   state = newState;
   lastStateTransitionAt = millis();
+}
+
+void print(const char* msg) {
+  #ifdef __AVR_ATmega328P__
+    Serial.println(msg);
+  #endif
 }
